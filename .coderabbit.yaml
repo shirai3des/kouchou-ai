@@ -2,3 +2,4 @@ review:
   auto_review: true
   auto_summarize: true
   language: 'ja'
+language: ja             # global language for reviews & chat
