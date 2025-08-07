@@ -325,6 +325,10 @@ export function useAISettings() {
       if (model === "gemini-2.0-flash") {
         return "Gemini 2.0 Flash：次世代機能を搭載したバランスの取れたマルチモーダルモデルです。";
       }
+      if (model === "gemini-2.0-flash-lite") {
+        return "Gemini 2.0 Flash Lite：低レイテンシを重視した軽量版モデルです。高速レスポンスが必要なアプリケーションに適しています。";
+      }
+    }
     }
     return "";
   };

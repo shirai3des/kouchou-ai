@@ -15,10 +15,30 @@ load_dotenv(DOTENV_PATH)
 try:
     from litellm import completion
     import litellm
+    # LiteLLM固有の例外をインポート
+    from litellm import RateLimitError as LiteLLMRateLimitError
+    from litellm import AuthenticationError as LiteLLMAuthenticationError
+    from litellm import APITimeoutError as LiteLLMAPITimeoutError
+    from litellm import BadRequestError as LiteLLMBadRequestError
+    from litellm import PermissionDeniedError as LiteLLMPermissionDeniedError
+    from litellm import ServiceUnavailableError as LiteLLMServiceUnavailableError
     LITELLM_AVAILABLE = True
 except ImportError:
     LITELLM_AVAILABLE = False
     logging.warning("LiteLLM is not available. Gemini support will be disabled.")
+    # フォールバック用の例外クラス
+    class LiteLLMRateLimitError(Exception):
+        pass
+    class LiteLLMAuthenticationError(Exception):
+        pass
+    class LiteLLMAPITimeoutError(Exception):
+        pass
+    class LiteLLMBadRequestError(Exception):
+        pass
+    class LiteLLMPermissionDeniedError(Exception):
+        pass
+    class LiteLLMServiceUnavailableError(Exception):
+        pass
 
 @retry(
     retry=retry_if_exception_type(openai.RateLimitError),
@@ -595,7 +615,7 @@ def request_to_openrouter_chatcompletion(
 
 
 @retry(
-    retry=retry_if_exception_type(Exception),
+    retry=retry_if_exception_type((LiteLLMRateLimitError, openai.RateLimitError, openai.APITimeoutError)),
     wait=wait_exponential(multiplier=3, min=3, max=20),
     stop=stop_after_attempt(3),
     reraise=True,
@@ -633,14 +653,16 @@ def request_to_gemini_chatcompletion(
         if not model.startswith("gemini/"):
             model = f"gemini/{model}"
         
-        # レスポンス形式の設定
-        response_format = None
+        # レスポンス形式の設定（他のプロバイダーと統一）
         if isinstance(json_schema, type) and issubclass(json_schema, BaseModel):
+            # BaseModelの場合は特別な処理が必要だが、LiteLLMでは通常のresponse_formatとして扱う
             response_format = json_schema
-        elif is_json:
-            response_format = {"type": "json_object"}
-        elif json_schema:
-            response_format = json_schema
+        else:
+            response_format = None
+            if is_json:
+                response_format = {"type": "json_object"}
+            if json_schema:  # 両方有効化されていたら、json_schemaを優先
+                response_format = json_schema
 
         payload = {
             "model": model,
@@ -662,14 +684,38 @@ def request_to_gemini_chatcompletion(
             
         return response.choices[0].message.content, token_usage_input, token_usage_output, token_usage_total
         
+    except LiteLLMRateLimitError as e:
+        logging.warning(f"Gemini API rate limit hit: {e}")
+        raise
+    except LiteLLMAuthenticationError as e:
+        logging.error(f"Gemini API authentication error: {str(e)}")
+        raise
+    except LiteLLMAPITimeoutError as e:
+        logging.error(f"Gemini API timeout error: {str(e)}")
+        raise
+    except LiteLLMBadRequestError as e:
+        logging.error(f"Gemini API bad request error: {str(e)}")
+        raise
+    except LiteLLMPermissionDeniedError as e:
+        logging.error(f"Gemini API permission denied error: {str(e)}")
+        raise
+    except LiteLLMServiceUnavailableError as e:
+        logging.error(f"Gemini API service unavailable error: {str(e)}")
+        raise
+    except openai.RateLimitError as e:
+        logging.warning(f"Gemini API rate limit hit (OpenAI format): {e}")
+        raise
+    except openai.AuthenticationError as e:
+        logging.error(f"Gemini API authentication error (OpenAI format): {str(e)}")
+        raise
+    except openai.APITimeoutError as e:
+        logging.error(f"Gemini API timeout error (OpenAI format): {str(e)}")
+        raise
+    except openai.BadRequestError as e:
+        logging.error(f"Gemini API bad request error (OpenAI format): {str(e)}")
+        raise
     except Exception as e:
-        logging.error(f"Gemini API error: {str(e)}")
-        if "rate_limit" in str(e).lower():
-            logging.warning(f"Gemini API rate limit hit: {e}")
-        elif "authentication" in str(e).lower():
-            logging.error(f"Gemini API authentication error: {str(e)}")
-        elif "bad_request" in str(e).lower():
-            logging.error(f"Gemini API bad request error: {str(e)}")
+        logging.error(f"Unexpected Gemini API error: {str(e)}")
         raise
 
 
