@@ -4,12 +4,19 @@ import openai
 from fastapi import APIRouter, Depends, HTTPException, Query, Security
 from fastapi.responses import FileResponse, ORJSONResponse
 from fastapi.security.api_key import APIKeyHeader
+# LiteLLMの例外をインポート
+from litellm import (
+    AuthenticationError as LiteLLMAuthenticationError,
+)
+from litellm import (
+    RateLimitError as LiteLLMRateLimitError,
+)
 
 from src.config import settings
 from src.core.exceptions import ClusterCSVParseError, ClusterFileNotFound
 from src.repositories.cluster_repository import ClusterRepository
 from src.repositories.config_repository import ConfigRepository
-from src.schemas.admin_report import ReportInput, ReportVisibilityUpdate
+from src.schemas.admin_report import ReportInput, ReportVisibilityUpdate, VerifyAPIKeyInput
 from src.schemas.cluster import ClusterResponse, ClusterUpdate
 from src.schemas.report import Report, ReportStatus
 from src.schemas.report_config import ReportConfigUpdate
@@ -259,62 +266,76 @@ async def get_models(
         raise HTTPException(status_code=500, detail="Internal server error") from e
 
 
-@router.get("/admin/environment/verify-chatgpt")
-async def verify_chatgpt_api_key(api_key: str = Depends(verify_admin_api_key)) -> dict:
-    """Verify the ChatGPT API key configuration by making a simple chat request.
+@router.post("/admin/environment/verify-api-key")
+async def verify_api_key(input_data: VerifyAPIKeyInput, api_key: str = Depends(verify_admin_api_key)) -> dict:
+    """APIキーの有効性を確認するエンドポイント
 
-    Checks both OpenAI and Azure OpenAI configurations based on the USE_AZURE setting.
-    Makes a simple chat request to verify the API key is valid and properly configured.
+    Args:
+        input_data: プロバイダー情報を含む入力データ
+        api_key: 管理者APIキー
 
     Returns:
-        dict: Status of the verification and any error messages in Japanese
+        検証結果
     """
     from broadlistening.pipeline.services.llm import request_to_chat_ai
 
-    try:
-        test_messages = [
-            {"role": "system", "content": "This is a test message to verify API key."},
-            {"role": "user", "content": "Hello"},
-        ]
+    provider = input_data.provider
+    test_messages = [
+        {"role": "system", "content": "This is a test message to verify API key."},
+        {"role": "user", "content": "Hello"},
+    ]
 
-        _ = request_to_chat_ai(
+    # プロバイダーごとのテストモデルを定義
+    model_map = {
+        "openai": "gpt-4o-mini",
+        "gemini": "gemini-1.5-flash-latest",
+        "azure": "gpt-4o-mini",  # Azureの場合はデプロイ名に依存
+        "openrouter": "openai/gpt-4o-mini",
+        "local": "llama3",
+    }
+    model = model_map.get(provider)
+    if not model:
+        raise HTTPException(status_code=400, detail=f"Unsupported provider: {provider}")
+
+    try:
+        _, _, _, _ = request_to_chat_ai(
             messages=test_messages,
-            model="gpt-4o-mini",
+            model=model,
+            provider=provider,
         )
 
         return {
             "success": True,
-            "message": "ChatGPT API キーは有効です",
-            "error_detail": None,
-            "error_type": None,
+            "message": "API キーは有効です",
         }
 
-    except openai.AuthenticationError as e:
+    except (openai.AuthenticationError, LiteLLMAuthenticationError) as e:
         return {
             "success": False,
-            "message": "認証エラー: APIキーが無効または期限切れです",
+            "message": "認証エラー: APIキーが無効または期限切れの可能性があります。",
             "error_detail": str(e),
             "error_type": "authentication_error",
         }
-    except openai.RateLimitError as e:
+    except (openai.RateLimitError, LiteLLMRateLimitError) as e:
         error_str = str(e).lower()
-        if "insufficient_quota" in error_str or "quota exceeded" in error_str:
+        if "insufficient_quota" in error_str or "quota" in error_str:
             return {
                 "success": False,
-                "message": "残高不足エラー: APIキーのデポジット残高が不足しています。残高を追加してください。",
+                "message": "残高不足エラー: APIキーのクレジット残高が不足している可能性があります。",
                 "error_detail": str(e),
                 "error_type": "insufficient_quota",
             }
         return {
             "success": False,
-            "message": "レート制限エラー: APIリクエストの制限を超えました。しばらく待ってから再試行してください。",
+            "message": "レート制限エラー: APIリクエストの制限を超えました。",
             "error_detail": str(e),
             "error_type": "rate_limit_error",
         }
     except Exception as e:
+        slogger.error(f"Unknown API key verification error: {e}", exc_info=True)
         return {
             "success": False,
-            "message": f"エラーが発生しました: {str(e)}",
+            "message": f"不明なエラーが発生しました: {e}",
             "error_detail": str(e),
             "error_type": "unknown_error",
         }

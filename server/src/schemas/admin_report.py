@@ -44,3 +44,9 @@ class ReportVisibilityUpdate(SchemaBaseModel):
     """レポートの可視性更新用スキーマ"""
 
     visibility: ReportVisibility  # レポートの可視性
+
+
+class VerifyAPIKeyInput(SchemaBaseModel):
+    """APIキー検証用スキーマ"""
+
+    provider: str

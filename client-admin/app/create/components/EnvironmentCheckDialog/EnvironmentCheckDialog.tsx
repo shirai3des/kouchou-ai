@@ -16,10 +16,10 @@ import { SquareArrowOutUpRight } from "lucide-react";
 import { startTransition, useActionState, useState } from "react";
 import { ErrorIcon } from "./ErrorIcon";
 import { GradientCheckIcon } from "./GradientCheckIcon";
-import { verifyChatGptApiKey } from "./verifyChatGptApiKey";
+import { verifyApiKey } from "./verifyApiKey";
 
-function Dialog() {
-  const [state, action, isPending] = useActionState(verifyChatGptApiKey, { result: null, error: false });
+function Dialog({ provider }: { provider: string }) {
+  const [state, action, isPending] = useActionState(verifyApiKey, { result: null, error: false });
 
   return (
     <>
@@ -50,7 +50,7 @@ function Dialog() {
               ボタン押下をもって上記に同意とみなします。
             </Text>
             <Box mt="4">
-              <Button size="md" onClick={() => startTransition(() => action())} loading={isPending}>
+              <Button size="md" onClick={() => startTransition(() => action(provider))} loading={isPending}>
                 チェックする
               </Button>
             </Box>
@@ -74,11 +74,7 @@ function Dialog() {
             justifyContent="center"
             textAlign="center"
           >
-            <Text textStyle="body/md">
-              正しく接続されています。
-              <br />
-              このままレポートを作成いただけます。
-            </Text>
+            <Text textStyle="body/md">{state.result?.message}</Text>
           </DialogBody>
           <DialogCloseTrigger />
           <DialogFooter justifyContent="center">
@@ -112,14 +108,7 @@ function Dialog() {
               内容をご確認ください。
             </Text>
             <Box p="4" mt="6" bg="rgba(254, 242, 242, 1)" color="font.error" textAlign="left" textStyle="body/sm">
-              {state.result?.error_type === "authentication_error" &&
-                "APIキーが無効または期限切れです。.envファイルを確認し修正してください。APIキーを改めて取得し直した場合も再設定が必要です。"}
-              {state.result?.error_type === "insufficient_quota" &&
-                "デポジット残高が不足しています。チャージしてください。"}
-              {state.result?.error_type === "rate_limit_error" &&
-                "APIのレート制限に達しました。時間をおいて再度お試しください。"}
-              {state.result?.error_type === "unknown_error" &&
-                "不明なエラーが発生しました。APIの設定や接続を再確認してください。"}
+              {state.result?.message}
             </Box>
           </DialogBody>
           <DialogCloseTrigger />
@@ -136,7 +125,7 @@ function Dialog() {
   );
 }
 
-export function EnvironmentCheckDialog() {
+export function EnvironmentCheckDialog({ provider }: { provider: string }) {
   const [uuid, setUUID] = useState(crypto.randomUUID());
 
   return (
@@ -163,7 +152,7 @@ export function EnvironmentCheckDialog() {
           API接続チェック <SquareArrowOutUpRight />
         </Button>
       </DialogTrigger>
-      <Dialog />
+      <Dialog provider={provider} />
     </DialogRoot>
   );
 }

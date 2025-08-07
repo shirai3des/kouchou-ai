@@ -12,14 +12,15 @@ type VerificationResult = {
   error_detail?: string;
 };
 
-export const verifyChatGptApiKey = async () => {
+export const verifyApiKey = async (provider: string) => {
   try {
-    const response = await fetch(`${getApiBaseUrl()}/admin/environment/verify-chatgpt`, {
-      method: "GET",
+    const response = await fetch(`${getApiBaseUrl()}/admin/environment/verify-api-key`, {
+      method: "POST",
       headers: {
         "x-api-key": process.env.NEXT_PUBLIC_ADMIN_API_KEY || "",
         "Content-Type": "application/json",
       },
+      body: JSON.stringify({ provider }),
     });
 
     const result = (await response.json()) as VerificationResult;

@@ -1,4 +1,4 @@
-import { verifyChatGptApiKey } from "./verifyChatGptApiKey";
+import { verifyApiKey } from "./verifyApiKey";
 
 // APIレスポンスをモック
 global.fetch = jest.fn();
@@ -8,7 +8,7 @@ jest.mock("@/app/utils/api", () => ({
   getApiBaseUrl: jest.fn(() => "http://localhost:8000"),
 }));
 
-describe("verifyChatGptApiKey", () => {
+describe("verifyApiKey", () => {
   beforeEach(() => {
     jest.clearAllMocks();
     // 環境変数をモック
@@ -22,22 +22,22 @@ describe("verifyChatGptApiKey", () => {
   it("API検証が成功した場合、正常な結果を返すべき", async () => {
     const mockResponse = {
       success: true,
-      message: "API key verified successfully",
-      available_models: ["gpt-3.5-turbo", "gpt-4"],
+      message: "API key is valid",
     };
 
     (fetch as jest.Mock).mockResolvedValueOnce({
       json: jest.fn().mockResolvedValueOnce(mockResponse),
     });
 
-    const result = await verifyChatGptApiKey();
+    const result = await verifyApiKey("openai");
 
-    expect(fetch).toHaveBeenCalledWith("http://localhost:8000/admin/environment/verify-chatgpt", {
-      method: "GET",
+    expect(fetch).toHaveBeenCalledWith("http://localhost:8000/admin/environment/verify-api-key", {
+      method: "POST",
       headers: {
         "x-api-key": "test-api-key",
         "Content-Type": "application/json",
       },
+      body: JSON.stringify({ provider: "openai" }),
     });
 
     expect(result).toEqual({
@@ -51,7 +51,7 @@ describe("verifyChatGptApiKey", () => {
 
     const consoleSpy = jest.spyOn(console, "error").mockImplementation(() => {});
 
-    const result = await verifyChatGptApiKey();
+    const result = await verifyApiKey("gemini");
 
     expect(result).toEqual({
       result: null,
