@@ -22,6 +22,14 @@ class LLMPricing:
             "openai/gpt-4o-2024-08-06": {"input": 2.50, "output": 10.00},
             "google/gemini-2.5-pro-preview": {"input": 1.25, "output": 10.00},
         },
+        "gemini": {
+            # 2025年最新価格（USD per million tokens）
+            "gemini-2.5-pro": {"input": 1.25, "output": 10.00},  # <200k tokens
+            "gemini-2.5-flash": {"input": 0.10, "output": 0.40},
+            "gemini-2.5-flash-lite": {"input": 0.10, "output": 0.40},  # 最もコスト効率的
+            "gemini-2.0-flash": {"input": 0.10, "output": 0.40},
+            "gemini-2.0-flash-lite": {"input": 0.10, "output": 0.40},
+        },
     }
 
     DEFAULT_PRICE = {"input": 0, "output": 0}  # 不明なモデルは 0 = 情報なし

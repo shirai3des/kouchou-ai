@@ -27,6 +27,16 @@ OPENAI_MODELS = [
     ModelOption("o3-mini", "o3-mini"),
 ]
 
+# Geminiモデルのリスト（2025年最新版）
+GEMINI_MODELS = [
+    # メインモデル
+    ModelOption("gemini-2.5-pro", "Gemini 2.5 Pro (最高性能・思考モデル)"),
+    ModelOption("gemini-2.5-flash", "Gemini 2.5 Flash (価格性能比最良)"),
+    ModelOption("gemini-2.5-flash-lite", "Gemini 2.5 Flash Lite (コスト効率重視)"),
+    ModelOption("gemini-2.0-flash", "Gemini 2.0 Flash (次世代機能)"),
+    ModelOption("gemini-2.0-flash-lite", "Gemini 2.0 Flash Lite (低レイテンシ)"),
+]
+
 
 async def get_openai_models() -> list[dict[str, str]]:
     """OpenAIのモデルリストを取得"""
@@ -36,6 +46,11 @@ async def get_openai_models() -> list[dict[str, str]]:
 async def get_azure_models() -> list[dict[str, str]]:
     """Azureのモデルリストを取得（OpenAIと同じ）"""
     return [model.to_dict() for model in OPENAI_MODELS]
+
+
+async def get_gemini_models() -> list[dict[str, str]]:
+    """Geminiのモデルリストを取得"""
+    return [model.to_dict() for model in GEMINI_MODELS]
 
 
 async def get_openrouter_models() -> list[dict[str, str]]:
@@ -104,5 +119,7 @@ async def get_models_by_provider(provider: str, address: str | None = None) -> l
         return await get_openrouter_models()
     elif provider == "local":
         return await get_local_llm_models(address)
+    elif provider == "gemini":
+        return await get_gemini_models()
     else:
         raise ValueError(f"Unknown provider: {provider}")

@@ -1,7 +1,7 @@
 import { toaster } from "@/components/ui/toaster";
 import { type ChangeEvent, useEffect, useState } from "react";
 
-export type Provider = "openai" | "azure" | "openrouter" | "local";
+export type Provider = "openai" | "azure" | "openrouter" | "local" | "gemini";
 
 export interface ModelOption {
   value: string;
@@ -38,6 +38,15 @@ const OPENROUTER_MODELS: ModelOption[] = [
   { value: "openai/gpt-4o-2024-08-06", label: "GPT-4o (OpenRouter)" },
   { value: "openai/gpt-4o-mini-2024-07-18", label: "GPT-4o mini (OpenRouter)" },
   { value: "google/gemini-2.5-pro-preview", label: "Gemini 2.5 Pro" },
+];
+
+// Geminiで利用可能なモデル（2025年最新版）
+const GEMINI_MODELS: ModelOption[] = [
+  { value: "gemini-2.5-pro", label: "Gemini 2.5 Pro (最高性能・思考モデル)" },
+  { value: "gemini-2.5-flash", label: "Gemini 2.5 Flash (価格性能比最良)" },
+  { value: "gemini-2.5-flash-lite", label: "Gemini 2.5 Flash Lite (コスト効率重視)" },
+  { value: "gemini-2.0-flash", label: "Gemini 2.0 Flash (次世代機能)" },
+  { value: "gemini-2.0-flash-lite", label: "Gemini 2.0 Flash Lite (低レイテンシ)" },
 ];
 
 /**
@@ -124,6 +133,7 @@ export function useAISettings() {
 
   const [openRouterModels, setOpenRouterModels] = useState<ModelOption[]>([]);
   const [localLLMModels, setLocalLLMModels] = useState<ModelOption[]>([]);
+  const [geminiModels, setGeminiModels] = useState<ModelOption[]>([]);
 
   useEffect(() => {
     saveToStorage(STORAGE_KEYS.PROVIDER, provider);
@@ -154,6 +164,11 @@ export function useAISettings() {
       setOpenRouterModels(OPENROUTER_MODELS);
       if (OPENROUTER_MODELS.length > 0) {
         setModel(OPENROUTER_MODELS[0].value);
+      }
+    } else if (provider === "gemini") {
+      setGeminiModels(GEMINI_MODELS);
+      if (GEMINI_MODELS.length > 0) {
+        setModel(GEMINI_MODELS[0].value);
       }
     }
 
@@ -201,20 +216,29 @@ export function useAISettings() {
   const providerConfigs: Record<Provider, ProviderConfig> = {
     openai: {
       models: OPENAI_MODELS,
-      description: "OpenAI APIを使用します。OpenAIのAPIキーが必要です。",
+      description:
+        "OpenAI社が開発したGPTシリーズのモデルです。高い性能と安定性を提供します。利用にはOpenAI APIキーが必要です。",
     },
     azure: {
-      models: OPENAI_MODELS, // Azureは同じモデルリストを使用
-      description: "Azure OpenAI Serviceを使用します。Azureの設定が必要です。",
+      models: OPENAI_MODELS,
+      description:
+        "Microsoft Azure上で提供されるOpenAIのモデルです。企業向けのセキュリティと信頼性を提供します。利用にはAzure OpenAI Serviceの設定が必要です。",
     },
     openrouter: {
-      models: OPENROUTER_MODELS,
-      description: "OpenRouterを使用して複数のモデルにアクセスします。",
+      models: openRouterModels.length > 0 ? openRouterModels : OPENROUTER_MODELS,
+      description:
+        "OpenRouterを通じて様々なAIモデルにアクセスできます。OpenAI、Google、Anthropicなど複数のプロバイダーのモデルを統一的に利用できます。利用にはOpenRouter APIキーが必要です。",
     },
     local: {
       models: localLLMModels,
-      description: "ローカルで実行されているLLMサーバーに接続します。",
+      description:
+        "ローカル環境で動作するLLMモデルです。OllamaやLM Studioなど、OpenAI互換APIを提供するローカルLLMサービスに対応しています。外部APIキーは不要ですが、ローカルでのモデル実行環境が必要です。",
       requiresConnection: true,
+    },
+    gemini: {
+      models: geminiModels.length > 0 ? geminiModels : GEMINI_MODELS,
+      description:
+        "Google AIが開発したGeminiシリーズのモデルです。マルチモーダル対応で、テキスト、画像、音声、動画の処理が可能です。利用にはGoogle AI Studio APIキーが必要です。",
     },
   };
 
@@ -288,6 +312,19 @@ export function useAISettings() {
       if (model === "o3-mini") {
         return "o3-mini：gpt-4oよりも高度な推論能力を備えたモデルです。性能はより高くなりますが、gpt-4oと比較してOpenAI APIの料金は高くなります。";
       }
+    } else if (provider === "gemini") {
+      if (model === "gemini-2.5-pro") {
+        return "Gemini 2.5 Pro：Googleの最新思考モデル。複雑な推論、コーディング、数学問題に優れています。";
+      }
+      if (model === "gemini-2.5-flash") {
+        return "Gemini 2.5 Flash：価格性能比が最良のモデル。大規模処理や低レイテンシが必要なタスクに最適です。";
+      }
+      if (model === "gemini-2.5-flash-lite") {
+        return "Gemini 2.5 Flash Lite：最もコスト効率の良いモデル。大量のリクエスト処理に適しています。";
+      }
+      if (model === "gemini-2.0-flash") {
+        return "Gemini 2.0 Flash：次世代機能を搭載したバランスの取れたマルチモーダルモデルです。";
+      }
     }
     return "";
   };
@@ -334,6 +371,7 @@ export function useAISettings() {
     setLocalLLMAddress(DEFAULT_LOCAL_LLM_ADDRESS);
     setOpenRouterModels([]);
     setLocalLLMModels([]);
+    setGeminiModels([]);
 
     saveToStorage(STORAGE_KEYS.PROVIDER, "openai");
     saveToStorage(STORAGE_KEYS.MODEL, "gpt-4o-mini");

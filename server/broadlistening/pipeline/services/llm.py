@@ -11,6 +11,14 @@ from tenacity import retry, retry_if_exception_type, stop_after_attempt, wait_ex
 DOTENV_PATH = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../../../.env"))
 load_dotenv(DOTENV_PATH)
 
+# LiteLLMのインポートを追加
+try:
+    from litellm import completion
+    import litellm
+    LITELLM_AVAILABLE = True
+except ImportError:
+    LITELLM_AVAILABLE = False
+    logging.warning("LiteLLM is not available. Gemini support will be disabled.")
 
 @retry(
     retry=retry_if_exception_type(openai.RateLimitError),
@@ -270,7 +278,7 @@ def request_to_chat_ai(
         model: 使用するモデル名
         is_json: JSONレスポンスを要求するかどうか
         json_schema: JSONスキーマ（Pydanticモデルまたは辞書）
-        provider: 使用するプロバイダー（"openai", "azure", "local", "openrouter"）
+        provider: 使用するプロバイダー（"openai", "azure", "local", "openrouter", "gemini"）
         local_llm_address: ローカルLLMのアドレス（provider="local"の場合のみ使用）
 
     Returns:
@@ -281,6 +289,7 @@ def request_to_chat_ai(
         - provider="azure": Azure OpenAI APIを使用
         - provider="local": ローカルLLM（OllamaやLM Studio）を使用
         - provider="openrouter": OpenRouter APIを使用（OpenAIやGeminiのモデルにアクセス可能）
+        - provider="gemini": Google Gemini APIを使用（LiteLLM経由）
     """
     if provider == "azure":
         return request_to_azure_chatcompletion(messages, is_json, json_schema)
@@ -292,6 +301,9 @@ def request_to_chat_ai(
     elif provider == "openrouter":
         # OpenRouterのモデル名を直接使用
         return request_to_openrouter_chatcompletion(messages, model, is_json, json_schema)
+    elif provider == "gemini":
+        # Geminiプロバイダーを追加
+        return request_to_gemini_chatcompletion(messages, model, is_json, json_schema)
     else:
         raise ValueError(f"Unknown provider: {provider}")
 
@@ -579,6 +591,85 @@ def request_to_openrouter_chatcompletion(
         raise
     except openai.BadRequestError as e:
         logging.error(f"OpenRouter API bad request error: {str(e)}")
+        raise
+
+
+@retry(
+    retry=retry_if_exception_type(Exception),
+    wait=wait_exponential(multiplier=3, min=3, max=20),
+    stop=stop_after_attempt(3),
+    reraise=True,
+)
+def request_to_gemini_chatcompletion(
+    messages: list[dict],
+    model: str,
+    is_json: bool = False,
+    json_schema: dict | type[BaseModel] = None,
+) -> tuple[str, int, int, int]:
+    """LiteLLMを使用してGemini APIにリクエストを送信する関数
+    
+    Args:
+        messages: チャットメッセージのリスト
+        model: 使用するGeminiモデル名
+        is_json: JSONレスポンスを要求するかどうか
+        json_schema: JSONスキーマ（Pydanticモデルまたは辞書）
+        
+    Returns:
+        AIからのレスポンスとトークン使用量(入力・出力・合計)のタプル
+    """
+    if not LITELLM_AVAILABLE:
+        raise RuntimeError("LiteLLM is not available. Please install it to use Gemini.")
+    
+    api_key = os.getenv("GEMINI_API_KEY")
+    if not api_key:
+        raise RuntimeError("GEMINI_API_KEY environment variable is not set")
+
+    token_usage_input = 0
+    token_usage_output = 0
+    token_usage_total = 0
+
+    try:
+        # Geminiモデル名にプレフィックスを追加
+        if not model.startswith("gemini/"):
+            model = f"gemini/{model}"
+        
+        # レスポンス形式の設定
+        response_format = None
+        if isinstance(json_schema, type) and issubclass(json_schema, BaseModel):
+            response_format = json_schema
+        elif is_json:
+            response_format = {"type": "json_object"}
+        elif json_schema:
+            response_format = json_schema
+
+        payload = {
+            "model": model,
+            "messages": messages,
+            "temperature": 0,
+            "seed": 0,
+            "timeout": 30,
+        }
+        
+        if response_format:
+            payload["response_format"] = response_format
+
+        response = completion(**payload)
+        
+        if hasattr(response, "usage") and response.usage:
+            token_usage_input = response.usage.prompt_tokens or 0
+            token_usage_output = response.usage.completion_tokens or 0
+            token_usage_total = response.usage.total_tokens or 0
+            
+        return response.choices[0].message.content, token_usage_input, token_usage_output, token_usage_total
+        
+    except Exception as e:
+        logging.error(f"Gemini API error: {str(e)}")
+        if "rate_limit" in str(e).lower():
+            logging.warning(f"Gemini API rate limit hit: {e}")
+        elif "authentication" in str(e).lower():
+            logging.error(f"Gemini API authentication error: {str(e)}")
+        elif "bad_request" in str(e).lower():
+            logging.error(f"Gemini API bad request error: {str(e)}")
         raise
 
 
